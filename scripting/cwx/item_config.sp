@@ -12,13 +12,23 @@ enum struct CustomItemDefinition {
 	char displayName[128];
 	KeyValues localizedNames;
 	char className[128];
+	char customClassName[128];
+	char clientClassName[128];
 	int loadoutPosition[NUM_PLAYER_CLASSES];
 	
 	char access[64];
 	
 	KeyValues nativeAttributes;
 	KeyValues customAttributes;
-	
+
+	KeyValues dataMapKV;
+
+	CustomSendtable sendTable;
+	CustomEntityFactory entityFactory;
+	CustomDatamap dataMap;
+
+	bool bInfoExists;
+
 	bool bKeepStaticAttributes;
 	
 	void Init() {
@@ -34,8 +44,92 @@ enum struct CustomItemDefinition {
 		delete this.nativeAttributes;
 		delete this.customAttributes;
 		delete this.localizedNames;
+		delete this.dataMapKV;
+		delete this.entityFactory;
+		delete this.sendTable;
+		delete this.dataMap;
 	}
-	
+
+	void CreateFactory() {
+		if(this.customClassName[0] == '\0' &&
+			this.clientClassName[0] == '\0' &&
+			!this.dataMapKV) {
+			return;
+		}
+
+		if(this.customClassName[0] == '\0') {
+			FormatEx(this.customClassName, 128, "tf_weapon_%s", this.uid);
+		}
+
+		this.entityFactory = EntityFactoryDictionary.register_based_name(this.customClassName, this.className);
+
+		if(this.dataMapKV) {
+			this.dataMap = CustomDatamap.from_factory(this.entityFactory);
+
+			if (this.dataMapKV.GotoFirstSubKey(false)) {
+				char name[128];
+				char value[32];
+
+				do {
+					this.dataMapKV.GetSectionName(name, 128);
+					this.dataMapKV.GetString(NULL_STRING, value, 128);
+
+					if(StrEqual(value, "int")) {
+						this.dataMap.add_prop(name, custom_prop_int);
+					} else if(StrEqual(value, "float")) {
+						this.dataMap.add_prop(name, custom_prop_float);
+					} else if(StrEqual(value, "bool")) {
+						this.dataMap.add_prop(name, custom_prop_bool);
+					} else if(StrEqual(value, "ehandle")) {
+						this.dataMap.add_prop(name, custom_prop_ehandle);
+					} else if(StrEqual(value, "vector")) {
+						this.dataMap.add_prop(name, custom_prop_vector);
+					} else if(StrEqual(value, "string")) {
+						this.dataMap.add_prop(name, custom_prop_string);
+					} else if(StrEqual(value, "color32")) {
+						this.dataMap.add_prop(name, custom_prop_color32);
+					} else if(StrEqual(value, "time")) {
+						this.dataMap.add_prop(name, custom_prop_time);
+					} else if(StrEqual(value, "tick")) {
+						this.dataMap.add_prop(name, custom_prop_tick);
+					} else if(StrEqual(value, "short")) {
+						this.dataMap.add_prop(name, custom_prop_short);
+					} else if(StrEqual(value, "char")) {
+						this.dataMap.add_prop(name, custom_prop_char);
+					} else if(StrEqual(value, "modelname")) {
+						this.dataMap.add_prop(name, custom_prop_modelname);
+					} else if(StrEqual(value, "modelindex")) {
+						this.dataMap.add_prop(name, custom_prop_modelindex);
+					} else if(StrEqual(value, "soundname")) {
+						this.dataMap.add_prop(name, custom_prop_soundname);
+					} else if(StrEqual(value, "variant")) {
+						this.dataMap.add_prop(name, custom_prop_variant);
+					}
+				} while (this.dataMapKV.GotoNextKey(false));
+				this.dataMapKV.GoBack();
+			}
+		}
+
+		if(this.clientClassName[0] != '\0') {
+			this.sendTable = CustomSendtable.from_factory(this.entityFactory);
+			this.sendTable.override_with(this.clientClassName);
+		}
+	}
+
+	void Precache() {
+		if(this.customClassName[0] == '\0') {
+			return;
+		}
+
+		char scriptFile[PLATFORM_MAX_PATH];
+		FormatEx(scriptFile, PLATFORM_MAX_PATH, "%s.txt", this.customClassName);
+
+		this.bInfoExists = FileExists(scriptFile, true, "WEAPONS");
+		if(this.bInfoExists) {
+			precache_weapon_file(scriptFile, false);
+		}
+	}
+
 	/**
 	 * If one exists, returns a copy of the contents of a named "extdata" subsection for the
 	 * item.  Returns null otherwise.
@@ -54,12 +148,23 @@ enum struct CustomItemDefinition {
 		this.source.GoBack();
 		return result;
 	}
+
+	KeyValues GetCustomAttributes() {
+		if(!this.customAttributes) {
+			return null;
+		}
+
+		KeyValues result = new KeyValues("attributes_custom");
+		result.Import(this.customAttributes);
+		return result;
+	}
 }
 
 /**
  * Holds a uid to CustomItemDefinition mapping.
  */
 static StringMap g_CustomItems;
+StringMap g_CustomItemsClassnameMap;
 
 void LoadCustomItemConfig() {
 	KeyValues itemSchema = new KeyValues("Items");
@@ -134,7 +239,10 @@ void LoadCustomItemConfig() {
 	
 	delete g_CustomItems;
 	g_CustomItems = new StringMap();
-	
+
+	delete g_CustomItemsClassnameMap;
+	g_CustomItemsClassnameMap = new StringMap();
+
 	if (itemSchema.GotoFirstSubKey()) {
 		// we have items, go parse 'em
 		do {
@@ -196,6 +304,8 @@ bool CreateItemFromSection(KeyValues config) {
 			inheritDef == TF_ITEMDEF_DEFAULT? item.defindex : inheritDef, item.loadoutPosition);
 	
 	config.GetString("item_class", item.className, sizeof(item.className), item.className);
+	config.GetString("custom_item_class", item.customClassName, sizeof(item.customClassName));
+	config.GetString("client_item_class", item.clientClassName, sizeof(item.clientClassName));
 	
 	item.bKeepStaticAttributes = !!config.GetNum("keep_static_attrs", true);
 	
@@ -234,7 +344,19 @@ bool CreateItemFromSection(KeyValues config) {
 		item.localizedNames.Import(config);
 		config.GoBack();
 	}
-	
+
+	if (config.JumpToKey("datamap")) {
+		item.dataMapKV = new KeyValues("datamap");
+		item.dataMapKV.Import(config);
+		config.GoBack();
+	}
+
+	item.CreateFactory();
+
+	if(item.customClassName[0] != '\0') {
+		g_CustomItemsClassnameMap.SetString(item.customClassName, item.uid);
+	}
+
 	g_CustomItems.SetArray(item.uid, item, sizeof(item));
 	return true;
 }
@@ -291,7 +413,11 @@ static bool ComputeEquipSlotPosition(KeyValues kv, int itemdef,
 int EquipCustomItem(int client, const CustomItemDefinition item) {
 	char itemClass[128];
 	
-	strcopy(itemClass, sizeof(itemClass), item.className);
+	if(item.customClassName[0] != '\0') {
+		strcopy(itemClass, sizeof(itemClass), item.customClassName);
+	} else {
+		strcopy(itemClass, sizeof(itemClass), item.className);
+	}
 	TF2Econ_TranslateWeaponEntForClass(itemClass, sizeof(itemClass),
 			TF2_GetPlayerClass(client));
 	

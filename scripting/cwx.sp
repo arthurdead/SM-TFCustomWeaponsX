@@ -19,6 +19,9 @@
 #include <clientprefs>
 #include <dhooks>
 
+#include <datamaps>
+#include <wpnhack>
+
 #define CWX_INCLUDE_SHAREDDEFS_ONLY
 #include <cwx>
 
@@ -157,6 +160,8 @@ public void OnPluginStart() {
 }
 
 public void OnAllPluginsLoaded() {
+	LoadCustomItemConfig();
+
 	BuildLoadoutSlotMenu();
 	
 	g_attrdef_AllowedInMedievalMode =
@@ -164,9 +169,43 @@ public void OnAllPluginsLoaded() {
 }
 
 public void OnMapStart() {
-	LoadCustomItemConfig();
-	
+	char uid[MAX_ITEM_IDENTIFIER_LENGTH];
+		
+	StringMapSnapshot itemList = GetCustomItemList();
+	for (int i; i < itemList.Length; i++) {
+		itemList.GetKey(i, uid, sizeof(uid));
+		
+		CustomItemDefinition item;
+		GetCustomItemDefinition(uid, item);
+		
+		item.Precache();
+	}
+	delete itemList;
+
 	PrecacheMenuResources();
+}
+
+bool GetItemUIDFromEntityOrClassname(int entity, const char[] classname, char[] buffer, int maxlen) {
+	if(entity != -1) {
+		if(GetItemUIDFromEntity(entity, buffer, maxlen)) {
+			return true;
+		}
+	}
+
+	return g_CustomItemsClassnameMap.GetString(classname, buffer, maxlen);
+}
+
+public Action get_weapon_script(int weapon, const char[] classname, char[] script, int length) {
+	char uid[MAX_ITEM_IDENTIFIER_LENGTH];
+	if(GetItemUIDFromEntityOrClassname(weapon, classname, uid, MAX_ITEM_IDENTIFIER_LENGTH)) {
+		CustomItemDefinition item;
+		GetCustomItemDefinition(uid, item);
+		if(!item.bInfoExists) {
+			FormatEx(script, length, "scripts/%s.txt", item.className);
+			return Plugin_Changed;
+		}
+	}
+	return Plugin_Continue;
 }
 
 /**
@@ -278,6 +317,29 @@ int Native_IsItemUIDValid(Handle plugin, int argc) {
 	return GetCustomItemDefinition(itemuid, item);
 }
 
+bool GetItemUIDFromEntity(int entity, char[] uid, int maxlen) {
+	if (!IsValidEntity(entity) || !HasEntProp(entity, Prop_Send, "m_AttributeList")) {
+		ThrowError("Entity %d is invalid or not an item", entity);
+		return false;
+	}
+	
+	// only pull the value from the runtime attribute list
+	Address result = TF2Attrib_GetByName(entity, ATTRIB_NAME_CUSTOM_UID);
+	if (!result) {
+		return false;
+	}
+	
+	any rawValue = TF2Attrib_GetValue(result);
+	
+	TF2Attrib_UnsafeGetStringValue(rawValue, uid, maxlen);
+	
+	if (strcmp(uid, "") == 0) {
+		return false;
+	}
+	
+	return true;
+}
+
 // bool CWX_GetItemUIDFromEntity(int entity, char[] buffer, int maxlen);
 int Native_GetItemUIDFromEntity(Handle plugin, int argc) {
 	int entity = GetNativeCell(1);
@@ -349,7 +411,7 @@ int Native_GetItemCustomAttributes(Handle plugin, int argc) {
 		return 0;
 	}
 	
-	KeyValues result = customItem.customAttributes;
+	KeyValues result = customItem.GetCustomAttributes();
 	return result? MoveHandle(result, plugin) : 0;
 }
 
