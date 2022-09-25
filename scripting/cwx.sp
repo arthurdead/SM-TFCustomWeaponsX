@@ -37,10 +37,6 @@ public Plugin myinfo = {
 	url = "https://github.com/nosoop/SM-TFCustomWeaponsX"
 }
 
-// this is the maximum expected length of our UID; it is intentional that this is *not* shared
-// to dependent plugins, as we may change this at any time
-#define MAX_ITEM_IDENTIFIER_LENGTH 64
-
 // this is the maximum length of the item name displayed to players
 #define MAX_ITEM_NAME_LENGTH 128
 
@@ -87,6 +83,8 @@ public APLRes AskPluginLoad2(Handle self, bool late, char[] error, int maxlen) {
 	CreateNative("CWX_IsItemUIDValid", Native_IsItemUIDValid);
 	CreateNative("CWX_GetItemUIDFromEntity", Native_GetItemUIDFromEntity);
 	CreateNative("CWX_GetItemExtData", Native_GetItemExtData);
+	CreateNative("CWX_GetItemCustomAttributes", Native_GetItemCustomAttributes);
+	CreateNative("CWX_ItemHasCustomAttribute", Native_ItemHasCustomAttribute);
 	CreateNative("CWX_GetItemLoadoutSlot", Native_GetItemLoadoutSlot);
 	
 	return APLRes_Success;
@@ -340,6 +338,41 @@ int Native_GetItemExtData(Handle plugin, int argc) {
 	return result? MoveHandle(result, plugin) : 0;
 }
 
+// optional<KeyValues> CWX_GetItemCustomAttributes(const char[] uid);
+int Native_GetItemCustomAttributes(Handle plugin, int argc) {
+	char uid[MAX_ITEM_IDENTIFIER_LENGTH];
+	
+	GetNativeString(1, uid, sizeof(uid));
+	
+	CustomItemDefinition customItem;
+	if (!GetCustomItemDefinition(uid, customItem)) {
+		return 0;
+	}
+	
+	KeyValues result = customItem.customAttributes;
+	return result? MoveHandle(result, plugin) : 0;
+}
+
+int Native_ItemHasCustomAttribute(Handle plugin, int argc) {
+	char uid[MAX_ITEM_IDENTIFIER_LENGTH];
+	char sectionName[64];
+	
+	GetNativeString(1, uid, sizeof(uid));
+	GetNativeString(2, sectionName, sizeof(sectionName));
+	
+	CustomItemDefinition customItem;
+	if (!GetCustomItemDefinition(uid, customItem)) {
+		return 0;
+	}
+	
+	if(customItem.customAttributes.JumpToKey(sectionName)) {
+		customItem.customAttributes.GoBack();
+		return 1;
+	}
+
+	return 0;
+}
+
 int s_LastUpdatedClient;
 
 /**
@@ -354,6 +387,7 @@ Action OnPlayerLoadoutUpdated(UserMsg msg_id, BfRead msg, const int[] players,
 		int playersNum, bool reliable, bool init) {
 	int client = msg.ReadByte();
 	s_LastUpdatedClient = GetClientSerial(client);
+	return Plugin_Continue;
 }
 
 /**
@@ -546,6 +580,8 @@ public Action OnClientCommandKeyValues(int client, KeyValues kv) {
 	if (StrEqual(cmd, "MVM_Respec")) {
 		g_bForceReequipItems[client] = true;
 	}
+
+	return Plugin_Continue;
 }
 
 public void OnClientCommandKeyValues_Post(int client, KeyValues kv) {
@@ -632,6 +668,7 @@ int Native_RemovePlayerLoadoutItem(Handle plugin, int argc) {
 	int flags = GetNativeCell(4);
 	
 	UnsetClientCustomLoadoutItem(client, playerClass, itemSlot, flags);
+	return 0;
 }
 
 /**
