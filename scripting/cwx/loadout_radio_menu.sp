@@ -14,6 +14,7 @@ static Menu s_LoadoutSlotMenu;
 static Menu s_EquipMenu;
 
 static int g_iPlayerClassInMenu[MAXPLAYERS + 1];
+static int g_iPlayerClassRepInMenu[MAXPLAYERS + 1];
 static int g_iPlayerSlotInMenu[MAXPLAYERS + 1];
 
 /**
@@ -75,6 +76,7 @@ static int bitsSlotVisibility[NUM_PLAYER_CLASSES] = {
  */
 Action DisplayItems(int client, int argc) {
 	g_iPlayerClassInMenu[client] = view_as<int>(TF2_GetPlayerClass(client));
+	g_iPlayerClassRepInMenu[client] = view_as<int>(TF2_GetClassRep(view_as<TFClassType>(g_iPlayerClassInMenu[client])));
 	if (!g_iPlayerClassInMenu[client]) {
 		return Plugin_Handled;
 	}
@@ -175,10 +177,10 @@ void BuildEquipMenu() {
  * Determines visibility of items in the loadout menu.
  */
 static bool ItemVisibleInEquipMenu(int client, const CustomItemDefinition item) {
-	int playerClass = g_iPlayerClassInMenu[client];
+	int playerClassRep = g_iPlayerClassRepInMenu[client];
 	
 	// not visible for current submenu
-	if (item.loadoutPosition[playerClass] != g_iPlayerSlotInMenu[client]) {
+	if (item.loadoutPosition[playerClassRep] != g_iPlayerSlotInMenu[client]) {
 		return false;
 	}
 	
@@ -236,7 +238,7 @@ static int OnLoadoutSlotMenuEvent(Menu menu, MenuAction action, int param1, int 
 			menu.GetItem(position, loadoutSlotName, sizeof(loadoutSlotName));
 			int loadoutSlot = TF2Econ_TranslateLoadoutSlotNameToIndex(loadoutSlotName);
 			
-			if (bitsSlotVisibility[g_iPlayerClassInMenu[client]] & (1 << loadoutSlot) == 0) {
+			if (bitsSlotVisibility[g_iPlayerClassRepInMenu[client]] & (1 << loadoutSlot) == 0) {
 				return ITEMDRAW_IGNORE;
 			}
 		}
@@ -283,7 +285,7 @@ static int OnEquipMenuEvent(Menu menu, MenuAction action, int param1, int param2
 			
 			char buffer[64];
 			FormatEx(buffer, sizeof(buffer), "%t » %t",
-					g_LocalizedPlayerClass[g_iPlayerClassInMenu[client]],
+					g_LocalizedPlayerClass[g_iPlayerClassRepInMenu[client]],
 					g_LocalizedLoadoutSlots[g_iPlayerSlotInMenu[client]]);
 			
 			panel.SetTitle(buffer);
@@ -351,7 +353,7 @@ static int OnEquipMenuEvent(Menu menu, MenuAction action, int param1, int param2
 			CustomItemDefinition item;
 			GetCustomItemDefinition(uid, item);
 			
-			int menuClass = g_iPlayerClassInMenu[client];
+			int menuClass = g_iPlayerClassRepInMenu[client];
 			int menuSlot = g_iPlayerSlotInMenu[client];
 			
 			bool equipped = StrEqual(g_CurrentLoadout[client][menuClass][menuSlot].uid, uid);

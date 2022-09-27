@@ -21,6 +21,7 @@
 
 #include <datamaps>
 #include <wpnhack>
+#include <clsobj_hack>
 
 #define CWX_INCLUDE_SHAREDDEFS_ONLY
 #include <cwx>
@@ -467,20 +468,21 @@ void OnPlayerLoadoutUpdatedPost(UserMsg msg_id, bool sent) {
 	
 	int client = GetClientFromSerial(s_LastUpdatedClient);
 	int playerClass = view_as<int>(TF2_GetPlayerClass(client));
+	int playerClassRep = view_as<int>(TF2_GetClassRep(view_as<TFClassType>(playerClass)));
 	
 	for (int i; i < NUM_ITEMS; i++) {
-		if (g_CurrentLoadout[client][playerClass][i].IsEmpty()) {
+		if (g_CurrentLoadout[client][playerClassRep][i].IsEmpty()) {
 			// no item specified, use default
 			continue;
 		}
 		
 		// equip our item if it isn't already equipped, or if it's being killed
 		// the latter applies to items that are normally invalid for the class
-		int currentLoadoutItem = g_CurrentLoadout[client][playerClass][i].entity;
+		int currentLoadoutItem = g_CurrentLoadout[client][playerClassRep][i].entity;
 		if (g_bForceReequipItems[client] || !IsValidEntity(currentLoadoutItem)
 				|| GetEntityFlags(currentLoadoutItem) & FL_KILLME) {
 			CustomItemDefinition item;
-			if (!g_CurrentLoadout[client][playerClass][i].GetItemDefinition(item)) {
+			if (!g_CurrentLoadout[client][playerClassRep][i].GetItemDefinition(item)) {
 				continue;
 			}
 			
@@ -488,7 +490,7 @@ void OnPlayerLoadoutUpdatedPost(UserMsg msg_id, bool sent) {
 				continue;
 			}
 			
-			g_CurrentLoadout[client][playerClass][i].entity =
+			g_CurrentLoadout[client][playerClassRep][i].entity =
 					EntIndexToEntRef(EquipCustomItem(client, item));
 		}
 	}
@@ -522,19 +524,21 @@ MRESReturn OnGetLoadoutItemPost(int client, Handle hReturn, Handle hParams) {
 	}
 	
 	int playerClass = DHookGetParam(hParams, 1);
+	int playerClassRep = view_as<int>(TF2_GetClassRep(view_as<TFClassType>(playerClass)));
+
 	int loadoutSlot = DHookGetParam(hParams, 2);
 	
 	if (loadoutSlot < 0 || loadoutSlot >= NUM_ITEMS) {
 		return MRES_Ignored;
 	}
 	
-	int storedItem = g_CurrentLoadout[client][playerClass][loadoutSlot].entity;
+	int storedItem = g_CurrentLoadout[client][playerClassRep][loadoutSlot].entity;
 	if (!IsValidEntity(storedItem) || GetEntityFlags(storedItem) & FL_KILLME
 			|| !HasEntProp(storedItem, Prop_Send, "m_Item")) {
 		// the loadout entity we keep track of isn't valid, so we may need to make one
 		// we expect to have to equip something new at this point
 		
-		if (g_CurrentLoadout[client][playerClass][loadoutSlot].IsEmpty()) {
+		if (g_CurrentLoadout[client][playerClassRep][loadoutSlot].IsEmpty()) {
 			// we don't have nor want a custom item; let the game process it
 			return MRES_Ignored;
 		}
@@ -567,8 +571,9 @@ MRESReturn OnGetLoadoutItemPost(int client, Handle hReturn, Handle hParams) {
  */
 MRESReturn OnManageRegularWeaponsPre(int client, Handle hParams) {
 	TFClassType playerClass = TF2_GetPlayerClass(client);
+	TFClassType playerClassRep = TF2_GetClassRep(playerClass);
 	for (int s; s < NUM_ITEMS; s++) {
-		int storedItem = g_CurrentLoadout[client][playerClass][s].entity;
+		int storedItem = g_CurrentLoadout[client][playerClassRep][s].entity;
 		if (!IsValidEntity(storedItem)) {
 			continue;
 		}
@@ -597,14 +602,15 @@ MRESReturn OnManageRegularWeaponsPre(int client, Handle hParams) {
  */
 MRESReturn OnManageRegularWeaponsPost(int client, Handle hParams) {
 	TFClassType playerClass = TF2_GetPlayerClass(client);
+	TFClassType playerClassRep = TF2_GetClassRep(playerClass);
 	for (int s; s < NUM_ITEMS; s++) {
-		int storedItem = g_CurrentLoadout[client][playerClass][s].entity;
+		int storedItem = g_CurrentLoadout[client][playerClassRep][s].entity;
 		if (!IsValidEntity(storedItem)) {
 			continue;
 		}
 		
 		CustomItemDefinition item;
-		if (!g_CurrentLoadout[client][playerClass][s].GetItemDefinition(item)) {
+		if (!g_CurrentLoadout[client][playerClassRep][s].GetItemDefinition(item)) {
 			continue;
 		}
 		
@@ -700,18 +706,20 @@ bool SetClientCustomLoadoutItem(int client, int playerClass, const char[] itemui
 		return false;
 	}
 	
-	int itemSlot = item.loadoutPosition[playerClass];
+	int playerClassRep = view_as<int>(TF2_GetClassRep(view_as<TFClassType>(playerClass)));
+
+	int itemSlot = item.loadoutPosition[playerClassRep];
 	if (0 <= itemSlot < NUM_ITEMS) {
 		if (flags & LOADOUT_FLAG_UPDATE_BACKEND) {
 			// item being set as user preference; update backend and set permanent UID slot
-			g_ItemPersistCookies[playerClass][itemSlot].Set(client, itemuid);
-			g_CurrentLoadout[client][playerClass][itemSlot].SetItemUID(itemuid);
+			g_ItemPersistCookies[playerClassRep][itemSlot].Set(client, itemuid);
+			g_CurrentLoadout[client][playerClassRep][itemSlot].SetItemUID(itemuid);
 		} else {
 			// item being set temporarily; set as overload
-			g_CurrentLoadout[client][playerClass][itemSlot].SetOverloadItemUID(itemuid);
+			g_CurrentLoadout[client][playerClassRep][itemSlot].SetOverloadItemUID(itemuid);
 		}
 		
-		g_CurrentLoadout[client][playerClass][itemSlot].entity = INVALID_ENT_REFERENCE;
+		g_CurrentLoadout[client][playerClassRep][itemSlot].entity = INVALID_ENT_REFERENCE;
 	} else {
 		return false;
 	}
@@ -737,11 +745,13 @@ int Native_RemovePlayerLoadoutItem(Handle plugin, int argc) {
  * Unsets any existing item in the given loadout slot for the specified class.
  */
 void UnsetClientCustomLoadoutItem(int client, int playerClass, int itemSlot, int flags) {
+	int playerClassRep = view_as<int>(TF2_GetClassRep(view_as<TFClassType>(playerClass)));
+
 	if (flags & LOADOUT_FLAG_UPDATE_BACKEND) {
-		g_CurrentLoadout[client][playerClass][itemSlot].Clear();
-		g_ItemPersistCookies[playerClass][itemSlot].Set(client, "");
+		g_CurrentLoadout[client][playerClassRep][itemSlot].Clear();
+		g_ItemPersistCookies[playerClassRep][itemSlot].Set(client, "");
 	} else {
-		g_CurrentLoadout[client][playerClass][itemSlot].SetOverloadItemUID("");
+		g_CurrentLoadout[client][playerClassRep][itemSlot].SetOverloadItemUID("");
 	}
 	
 	if (flags & LOADOUT_FLAG_ATTEMPT_REGEN) {
@@ -757,15 +767,17 @@ int Native_GetPlayerLoadoutItem(Handle plugin, int argc) {
 	int uidLen = GetNativeCell(5);
 	int flags = GetNativeCell(6);
 	
-	if (g_CurrentLoadout[client][playerClass][itemSlot].IsEmpty()) {
+	int playerClassRep = view_as<int>(TF2_GetClassRep(view_as<TFClassType>(playerClass)));
+
+	if (g_CurrentLoadout[client][playerClassRep][itemSlot].IsEmpty()) {
 		return false;
 	}
 	
 	char[] uid = new char[uidLen];
 	if (flags & LOADOUT_FLAG_UPDATE_BACKEND) {
-		strcopy(uid, uidLen, g_CurrentLoadout[client][playerClass][itemSlot].uid);
+		strcopy(uid, uidLen, g_CurrentLoadout[client][playerClassRep][itemSlot].uid);
 	} else {
-		strcopy(uid, uidLen, g_CurrentLoadout[client][playerClass][itemSlot].override_uid);
+		strcopy(uid, uidLen, g_CurrentLoadout[client][playerClassRep][itemSlot].override_uid);
 	}
 	SetNativeString(4, uid, uidLen);
 	return true;
@@ -885,7 +897,9 @@ static bool IsCustomItemAllowed(int client, const CustomItemDefinition item) {
 	}
 	
 	TFClassType playerClass = TF2_GetPlayerClass(client);
-	int slot = item.loadoutPosition[playerClass];
+	TFClassType playerClassRep = TF2_GetClassRep(playerClass);
+
+	int slot = item.loadoutPosition[playerClassRep];
 	
 	// TODO work out other restrictions?
 	
