@@ -22,8 +22,6 @@ stock int TF2_CreateItem(int defindex, const char[] itemClass) {
 		
 		SetEntProp(weapon, Prop_Send, "m_iEntityQuality", 6);
 		SetEntProp(weapon, Prop_Send, "m_iEntityLevel", 1);
-		
-		DispatchSpawn(weapon);
 	}
 	return weapon;
 }

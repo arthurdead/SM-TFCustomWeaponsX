@@ -67,6 +67,8 @@ ConVar sm_cwx_enable_loadout;
 
 ConVar mp_stalemate_meleeonly;
 
+char hack_last_uid[MAX_ITEM_IDENTIFIER_LENGTH];
+
 #include "cwx/item_config.sp"
 #include "cwx/item_entity.sp"
 #include "cwx/item_export.sp"
@@ -179,7 +181,10 @@ public void OnMapStart() {
 		CustomItemDefinition item;
 		GetCustomItemDefinition(uid, item);
 		
-		item.Precache();
+		item.bInfoExists = item.Precache();
+		item.bPrecached = true;
+
+		g_CustomItems.SetArray(uid, item, sizeof(item));
 	}
 	delete itemList;
 
@@ -198,12 +203,29 @@ bool GetItemUIDFromEntityOrClassname(int entity, const char[] classname, char[] 
 
 public Action get_weapon_script(int weapon, const char[] classname, char[] script, int length) {
 	char uid[MAX_ITEM_IDENTIFIER_LENGTH];
-	if(GetItemUIDFromEntityOrClassname(weapon, classname, uid, MAX_ITEM_IDENTIFIER_LENGTH)) {
+	bool got_uid = GetItemUIDFromEntityOrClassname(weapon, classname, uid, MAX_ITEM_IDENTIFIER_LENGTH);
+	if(!got_uid && hack_last_uid[0] != '\0') {
+		strcopy(uid, MAX_ITEM_IDENTIFIER_LENGTH, hack_last_uid);
+		got_uid = true;
+	}
+	if(got_uid) {
 		CustomItemDefinition item;
 		GetCustomItemDefinition(uid, item);
-		if(!item.bInfoExists) {
-			FormatEx(script, length, "scripts/%s.txt", item.className);
+		if(item.customScript[0] != '\0') {
+			FormatEx(script, length, "%s", item.customScript);
 			return Plugin_Changed;
+		} else {
+			if(!item.bPrecached) {
+				if(item.customClassName[0] != '\0') {
+					FormatEx(script, length, "%s.txt", item.customClassName);
+					return Plugin_Changed;
+				}
+			} else {
+				if(!item.bInfoExists) {
+					FormatEx(script, length, "scripts/%s.txt", item.className);
+					return Plugin_Changed;
+				}
+			}
 		}
 	}
 	return Plugin_Continue;
@@ -427,6 +449,10 @@ int Native_ItemHasCustomAttribute(Handle plugin, int argc) {
 	if (!GetCustomItemDefinition(uid, customItem)) {
 		return 0;
 	}
+
+	if(!customItem.customAttributes) {
+		return 0;
+	}
 	
 	if(customItem.customAttributes.JumpToKey(sectionName)) {
 		customItem.customAttributes.GoBack();
@@ -616,7 +642,11 @@ MRESReturn OnManageRegularWeaponsPost(int client, Handle hParams) {
 		
 		// have to resolve the classname since, y'know, multiclass.
 		char realClassName[64];
-		strcopy(realClassName, sizeof(realClassName), item.className);
+		if(item.customClassName[0] != '\0') {
+			strcopy(realClassName, sizeof(realClassName), item.customClassName);
+		} else {
+			strcopy(realClassName, sizeof(realClassName), item.className);
+		}
 		TF2Econ_TranslateWeaponEntForClass(realClassName, sizeof(realClassName), playerClass);
 		
 		SetEntProp(storedItem, Prop_Send, "m_iItemDefinitionIndex", item.defindex);

@@ -14,6 +14,7 @@ enum struct CustomItemDefinition {
 	char className[128];
 	char customClassName[128];
 	char clientClassName[128];
+	char customScript[PLATFORM_MAX_PATH];
 	int loadoutPosition[NUM_PLAYER_CLASSES];
 	
 	char access[64];
@@ -28,6 +29,7 @@ enum struct CustomItemDefinition {
 	CustomDatamap dataMap;
 
 	bool bInfoExists;
+	bool bPrecached;
 
 	bool bKeepStaticAttributes;
 	
@@ -53,12 +55,13 @@ enum struct CustomItemDefinition {
 	void CreateFactory() {
 		if(this.customClassName[0] == '\0' &&
 			this.clientClassName[0] == '\0' &&
-			!this.dataMapKV) {
+			!this.dataMapKV &&
+			this.customScript[0] == '\0') {
 			return;
 		}
 
 		if(this.customClassName[0] == '\0') {
-			FormatEx(this.customClassName, 128, "tf_weapon_%s", this.uid);
+			FormatEx(this.customClassName, 128, "cwx_weapon_%s", this.uid);
 		}
 
 		this.entityFactory = EntityFactoryDictionary.register_based_name(this.customClassName, this.className);
@@ -116,18 +119,31 @@ enum struct CustomItemDefinition {
 		}
 	}
 
-	void Precache() {
-		if(this.customClassName[0] == '\0') {
-			return;
+	bool Precache() {
+		if(this.customClassName[0] == '\0' &&
+			this.customScript[0] == '\0') {
+			return false;
 		}
 
 		char scriptFile[PLATFORM_MAX_PATH];
-		FormatEx(scriptFile, PLATFORM_MAX_PATH, "%s.txt", this.customClassName);
-
-		this.bInfoExists = FileExists(scriptFile, true, "WEAPONS");
-		if(this.bInfoExists) {
-			precache_weapon_file(scriptFile, false);
+		if(this.customScript[0] != '\0') {
+			FormatEx(scriptFile, PLATFORM_MAX_PATH, "%s", this.customScript);
+		} else if(this.customClassName[0] != '\0') {
+			FormatEx(scriptFile, PLATFORM_MAX_PATH, "%s.txt", this.customClassName);
 		}
+
+		if(scriptFile[0] == '\0') {
+			return false;
+		}
+
+		bool exists = FileExists(scriptFile, true, "WEAPONS");
+		if(exists) {
+			strcopy(hack_last_uid, MAX_ITEM_IDENTIFIER_LENGTH, this.uid);
+			precache_weapon_file(scriptFile, true);
+			hack_last_uid[0] = '\0';
+		}
+
+		return exists;
 	}
 
 	/**
@@ -163,7 +179,7 @@ enum struct CustomItemDefinition {
 /**
  * Holds a uid to CustomItemDefinition mapping.
  */
-static StringMap g_CustomItems;
+StringMap g_CustomItems;
 StringMap g_CustomItemsClassnameMap;
 
 void LoadCustomItemConfig() {
@@ -306,6 +322,7 @@ bool CreateItemFromSection(KeyValues config) {
 	config.GetString("item_class", item.className, sizeof(item.className), item.className);
 	config.GetString("custom_item_class", item.customClassName, sizeof(item.customClassName));
 	config.GetString("client_item_class", item.clientClassName, sizeof(item.clientClassName));
+	config.GetString("script", item.customScript, sizeof(item.customScript));
 	
 	item.bKeepStaticAttributes = !!config.GetNum("keep_static_attrs", true);
 	
@@ -411,6 +428,8 @@ static bool ComputeEquipSlotPosition(KeyValues kv, int itemdef,
  * Returns the item entity if successful.
  */
 int EquipCustomItem(int client, const CustomItemDefinition item) {
+	strcopy(hack_last_uid, MAX_ITEM_IDENTIFIER_LENGTH, item.uid);
+
 	char itemClass[128];
 	
 	if(item.customClassName[0] != '\0') {
@@ -423,7 +442,9 @@ int EquipCustomItem(int client, const CustomItemDefinition item) {
 	
 	// create our item
 	int itemEntity = TF2_CreateItem(item.defindex, itemClass);
-	
+
+	DispatchSpawn(itemEntity);
+
 	if (!IsFakeClient(client)) {
 		// prevent item from being thrown in resupply
 		int accountid = GetSteamAccountID(client);
@@ -491,6 +512,8 @@ int EquipCustomItem(int client, const CustomItemDefinition item) {
 		TF2_RemoveItemByLoadoutSlot(client, loadoutSlot);
 	}
 	TF2_EquipPlayerEconItem(client, itemEntity);
+
+	hack_last_uid[0] = '\0';
 	return itemEntity;
 }
 
