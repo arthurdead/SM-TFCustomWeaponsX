@@ -75,6 +75,8 @@ char hack_last_uid[MAX_ITEM_IDENTIFIER_LENGTH];
 #include "cwx/loadout_entries.sp"
 #include "cwx/loadout_radio_menu.sp"
 
+GlobalForward fwd_items_loaded;
+
 int g_attrdef_AllowedInMedievalMode;
 
 public APLRes AskPluginLoad2(Handle self, bool late, char[] error, int maxlen) {
@@ -92,7 +94,9 @@ public APLRes AskPluginLoad2(Handle self, bool late, char[] error, int maxlen) {
 	CreateNative("CWX_GetItemCustomAttributes", Native_GetItemCustomAttributes);
 	CreateNative("CWX_ItemHasCustomAttribute", Native_ItemHasCustomAttribute);
 	CreateNative("CWX_GetItemLoadoutSlot", Native_GetItemLoadoutSlot);
-	
+
+	fwd_items_loaded = new GlobalForward("CWX_ItemsLoaded", ET_Ignore);
+
 	return APLRes_Success;
 }
 
@@ -164,6 +168,11 @@ public void OnPluginStart() {
 
 public void OnAllPluginsLoaded() {
 	LoadCustomItemConfig();
+
+	if(fwd_items_loaded.FunctionCount > 0) {
+		Call_StartForward(fwd_items_loaded);
+		Call_Finish();
+	}
 
 	BuildLoadoutSlotMenu();
 	

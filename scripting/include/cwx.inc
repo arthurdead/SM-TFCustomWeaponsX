@@ -127,6 +127,8 @@ native KeyValues CWX_GetItemCustomAttributes(const char[] uid);
 
 native bool CWX_ItemHasCustomAttribute(const char[] uid, const char[] name);
 
+forward void CWX_ItemsLoaded();
+
 public SharedPlugin __pl_custom_weapons_x = {
 	name = "cwx",
 	file = "cwx.smx",
