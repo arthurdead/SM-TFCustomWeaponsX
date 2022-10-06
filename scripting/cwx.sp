@@ -64,6 +64,8 @@ Cookie g_ItemPersistCookies[NUM_PLAYER_CLASSES][NUM_ITEMS];
 bool g_bForceReequipItems[MAXPLAYERS + 1];
 
 ConVar sm_cwx_enable_loadout;
+ConVar sm_cwx_enable_menus;
+ConVar sm_cwx_enable_cookies;
 
 ConVar mp_stalemate_meleeonly;
 
@@ -131,6 +133,9 @@ public void OnPluginStart() {
 	sm_cwx_enable_loadout = CreateConVar("sm_cwx_enable_loadout", "1",
 			"Allows players to receive custom items they have selected.");
 	
+	sm_cwx_enable_menus = CreateConVar("sm_cwx_enable_menus", "1");
+	sm_cwx_enable_cookies = CreateConVar("sm_cwx_enable_cookies", "1");
+
 	RegAdminCmd("sm_cwx_export", ExportActiveWeapon, ADMFLAG_ROOT);
 	
 	// player commands
@@ -269,13 +274,15 @@ void FetchLoadoutItems(int client) {
 }
 
 public void OnClientCookiesCached(int client) {
-	for (int c; c < NUM_PLAYER_CLASSES; c++) {
-		for (int i; i < NUM_ITEMS; i++) {
-			g_ItemPersistCookies[c][i].Get(client, g_CurrentLoadout[client][c][i].uid,
-					sizeof(g_CurrentLoadout[][][].uid));
+	if(sm_cwx_enable_cookies.BoolValue) {
+		for (int c; c < NUM_PLAYER_CLASSES; c++) {
+			for (int i; i < NUM_ITEMS; i++) {
+				g_ItemPersistCookies[c][i].Get(client, g_CurrentLoadout[client][c][i].uid,
+						sizeof(g_CurrentLoadout[][][].uid));
+			}
 		}
+		g_bRetrievedLoadout[client] = true;
 	}
-	g_bRetrievedLoadout[client] = true;
 }
 
 // int CWX_EquipPlayerItem(int client, const char[] uid);
@@ -751,7 +758,9 @@ bool SetClientCustomLoadoutItem(int client, int playerClass, const char[] itemui
 	if (0 <= itemSlot < NUM_ITEMS) {
 		if (flags & LOADOUT_FLAG_UPDATE_BACKEND) {
 			// item being set as user preference; update backend and set permanent UID slot
-			g_ItemPersistCookies[playerClassRep][itemSlot].Set(client, itemuid);
+			if(sm_cwx_enable_cookies.BoolValue) {
+				g_ItemPersistCookies[playerClassRep][itemSlot].Set(client, itemuid);
+			}
 			g_CurrentLoadout[client][playerClassRep][itemSlot].SetItemUID(itemuid);
 		} else {
 			// item being set temporarily; set as overload

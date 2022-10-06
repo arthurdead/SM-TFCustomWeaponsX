@@ -75,6 +75,10 @@ static int bitsSlotVisibility[NUM_PLAYER_CLASSES] = {
  * Command callback to display items to a player.
  */
 Action DisplayItems(int client, int argc) {
+	if(!sm_cwx_enable_menus.BoolValue) {
+		return Plugin_Handled;
+	}
+
 	g_iPlayerClassInMenu[client] = view_as<int>(TF2_GetPlayerClass(client));
 	g_iPlayerClassRepInMenu[client] = view_as<int>(TF2_GetClassRep(view_as<TFClassType>(g_iPlayerClassInMenu[client])));
 	if (!g_iPlayerClassInMenu[client]) {
@@ -90,6 +94,10 @@ Action DisplayItems(int client, int argc) {
  * This is a compatibility shim; this only displays the CWX menu if CW3 isn't running.
  */
 Action DisplayItemsCompat(int client, const char[] command, int argc) {
+	if(!sm_cwx_enable_menus.BoolValue) {
+		return Plugin_Stop;
+	}
+
 	// allow CW3 to display if it's loaded in
 	if (FindPluginByFile("cw3.smx")) {
 		return Plugin_Continue;
