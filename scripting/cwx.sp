@@ -212,7 +212,7 @@ bool GetItemUIDFromEntityOrClassname(int entity, const char[] classname, char[] 
 		}
 	}
 
-	return g_CustomItemsClassnameMap.GetString(classname, buffer, maxlen);
+	return g_CustomItemsClassnameMap && g_CustomItemsClassnameMap.GetString(classname, buffer, maxlen);
 }
 
 public Action get_weapon_script(int weapon, const char[] classname, char[] script, int length) {
