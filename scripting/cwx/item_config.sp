@@ -64,7 +64,7 @@ enum struct CustomItemDefinition {
 			FormatEx(this.customClassName, 128, "cwx_weapon_%s", this.uid);
 		}
 
-		this.entityFactory = EntityFactoryDictionary.register_based_name(this.customClassName, this.className);
+		this.entityFactory = EntityFactoryDictionary.register_based(this.customClassName, this.className);
 
 		if(this.dataMapKV) {
 			this.dataMap = CustomDatamap.from_factory(this.entityFactory);
