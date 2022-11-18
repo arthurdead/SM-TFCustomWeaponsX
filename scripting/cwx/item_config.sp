@@ -115,7 +115,7 @@ enum struct CustomItemDefinition {
 
 		if(this.clientClassName[0] != '\0') {
 			this.sendTable = CustomSendtable.from_factory(this.entityFactory);
-			this.sendTable.override_with(this.clientClassName);
+			this.sendTable.set_client_class_id(this.clientClassName);
 		}
 	}
 
