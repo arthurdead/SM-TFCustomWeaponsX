@@ -23,6 +23,7 @@ enum struct CustomItemDefinition {
 	KeyValues customAttributes;
 
 	KeyValues dataMapKV;
+	KeyValues sendTableKV;
 
 	CustomSendtable sendTable;
 	CustomEntityFactory entityFactory;
@@ -47,6 +48,7 @@ enum struct CustomItemDefinition {
 		delete this.customAttributes;
 		delete this.localizedNames;
 		delete this.dataMapKV;
+		delete this.sendTableKV;
 		delete this.entityFactory;
 		delete this.sendTable;
 		delete this.dataMap;
@@ -56,6 +58,7 @@ enum struct CustomItemDefinition {
 		if(this.customClassName[0] == '\0' &&
 			this.clientClassName[0] == '\0' &&
 			!this.dataMapKV &&
+			!this.sendTableKV &&
 			this.customScript[0] == '\0') {
 			return;
 		}
@@ -113,9 +116,25 @@ enum struct CustomItemDefinition {
 			}
 		}
 
-		if(this.clientClassName[0] != '\0') {
+		if(this.clientClassName[0] != '\0' || this.sendTableKV) {
 			this.sendTable = CustomSendtable.from_factory(this.entityFactory);
+		}
+
+		if(this.clientClassName[0] != '\0') {
 			this.sendTable.set_client_class_id(this.clientClassName);
+		}
+
+		if(this.sendTableKV) {
+			if (this.sendTableKV.GotoFirstSubKey()) {
+				char name[128];
+
+				do {
+					this.sendTableKV.GetSectionName(name, 128);
+					
+					
+				} while (this.sendTableKV.GotoNextKey());
+				this.sendTableKV.GoBack();
+			}
 		}
 	}
 
@@ -365,6 +384,12 @@ bool CreateItemFromSection(KeyValues config) {
 	if (config.JumpToKey("datamap")) {
 		item.dataMapKV = new KeyValues("datamap");
 		item.dataMapKV.Import(config);
+		config.GoBack();
+	}
+
+	if (config.JumpToKey("sendtable")) {
+		item.sendTableKV = new KeyValues("sendtable");
+		item.sendTableKV.Import(config);
 		config.GoBack();
 	}
 

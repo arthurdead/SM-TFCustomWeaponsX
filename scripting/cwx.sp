@@ -171,6 +171,26 @@ public void OnPluginStart() {
 	}
 }
 
+public void OnPluginEnd() {
+	for (int i = 1; i <= MaxClients; i++) {
+		if(!IsClientInGame(i)) {
+			continue;
+		}
+
+		int playerClass = view_as<int>(TF2_GetPlayerClass(i));
+		int playerClassRep = view_as<int>(TF2_GetClassRep(view_as<TFClassType>(playerClass)));
+
+		for(int j = 0; j < NUM_ITEMS; ++j) {
+			g_CurrentLoadout[i][playerClassRep][j].Clear();
+			g_CurrentLoadout[i][playerClassRep][j].SetOverloadItemUID("");
+		}
+
+		SetEntProp(i, Prop_Send, "m_bRegenerating", true);
+		TF2_RespawnPlayer(i);
+		SetEntProp(i, Prop_Send, "m_bRegenerating", false);
+	}
+}
+
 public void OnAllPluginsLoaded() {
 	LoadCustomItemConfig();
 
